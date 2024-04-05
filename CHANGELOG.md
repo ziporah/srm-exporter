@@ -1,3 +1,26 @@
+## [1.2.0](https://github.com/gilmrt/srm-exporter/compare/1.1.0...1.2.0) (2024-04-05)
+
+
+### Features
+
+* gauge for uptime and login on startup ([#10](https://github.com/gilmrt/srm-exporter/issues/10)) ([03107fa](https://github.com/gilmrt/srm-exporter/commit/03107fa67109e6dd7af697efccfc0e0a51a44eb6))
+* update to python 3.12.0 ([#7](https://github.com/gilmrt/srm-exporter/issues/7)) ([6557fe3](https://github.com/gilmrt/srm-exporter/commit/6557fe31a20e902f4792c6ed509f6523acca1061))
+
+
+### Bug Fixes
+
+* add host label ([4e651c6](https://github.com/gilmrt/srm-exporter/commit/4e651c6c01d8a48e1a7ac6b0d81ab542aba115c6))
+* add missing host label ([0ec90ac](https://github.com/gilmrt/srm-exporter/commit/0ec90aca9b3eeb4450c8296df2c7185d0a20831f))
+* correct and comment unhealthy healthcheck ([#12](https://github.com/gilmrt/srm-exporter/issues/12)) ([25e8bfa](https://github.com/gilmrt/srm-exporter/commit/25e8bfa8effaedee69cd3b75062a6a77380fa3ec))
+* incorrect return ([855f2ff](https://github.com/gilmrt/srm-exporter/commit/855f2ff5e450f835b5357a6821ceef55de6f98a9))
+* update pyhton dependencies ([56c3c07](https://github.com/gilmrt/srm-exporter/commit/56c3c07b36056fdb9b5e1cff06c494e7a9dfe5b5))
+* update pyhton dependencies ([#11](https://github.com/gilmrt/srm-exporter/issues/11)) ([196c819](https://github.com/gilmrt/srm-exporter/commit/196c819477598afa7ecd78b0fc0c038bbfb92961))
+
+
+### Documentation
+
+* add known issues to README ([#8](https://github.com/gilmrt/srm-exporter/issues/8)) ([61fa69e](https://github.com/gilmrt/srm-exporter/commit/61fa69e8319514e4f33699a1ca161e14cb38c41f))
+
 ## [2.0.1](https://github.com/gilmrt/srm-exporter/compare/2.0.0...2.0.1) (2024-01-26)
 
 ### Bug Fixes
