@@ -156,6 +156,9 @@ srm_network_rx_total = Gauge(
 srm_network_tx_total = Gauge(
     "srm_network_tx_total", "SRM System Network total sent", ["host"]
 )
+# Define Prometheus metrics
+srm_profile_total_spent = Gauge('srm_profile_total_spent', 'Total time spent per profile in hours', ['profile_id', 'profile_name'])
+srm_profile_quota_percentage = Gauge('srm_profile_quota_percentage', 'Percentage of time quota used per profile', ['profile_id', 'profile_name'])
 
 HOST = str(os.environ.get("SRM_HOST", "192.168.1.1"))
 
@@ -409,6 +412,87 @@ def get_traffic_stats(client, mac_to_hostname, mac_to_ip_addr, period="day"):
         topUploaders,
     )
 
+def get_profile_stats(client):
+    # Fetch Config Groups
+    configgroups = client.http.call(
+        endpoint='entry.cgi',
+        api='SYNO.SafeAccess.AccessControl.ConfigGroup',
+        method='get',
+        version=1,
+    )
+
+    # Fetch Time Spent
+    timespents = client.http.call(
+        endpoint='entry.cgi',
+        api='SYNO.SafeAccess.AccessControl.ConfigGroup.Device.TimeSpent',
+        method='get',
+        version=1,
+    )
+
+    # Fetch Time Quotas
+    timequotas = client.http.call(
+        endpoint='entry.cgi',
+        api='SYNO.SafeAccess.AccessControl.Profile.Schedule.Timequota',
+        method='get',
+        version=1,
+    )
+
+    # Profile statistics
+    profile_stat = {}
+    profile_stats = []
+
+    # Determine current weekday
+    current_weekday = datetime.datetime.now().weekday()
+
+    current_weekday = datetime.datetime.now().weekday()
+
+    # Organize time quotas by profile ID
+    timequotas_dict = {}
+    for profile in timequotas['profiles']:
+        profile_id = profile['profile_id']
+        quotas = {quota['weekday']: quota['quota'] for quota in profile['timequotas']}
+        timequotas_dict[profile_id] = quotas.get(current_weekday, 0)  # Default to 0 if no quota for today
+
+    # Calculate total spent time and percentages
+    for config_group in configgroups['config_groups']:
+        profile_id = config_group['profile_id']
+        profile_name = config_group['name']
+        
+        total_spent_minutes = 0
+        for group in timespents['config_groups']:
+            if group['config_group_id'] == profile_id:
+                devices = group['device_timespent']
+                total_spent_minutes = sum(
+                    device['total_spent']['normal'] + device['total_spent']['reward']
+                    for device in devices.values()
+                )
+        
+        total_spent_hours = total_spent_minutes // 60
+        total_spent_minutes %= 60
+        
+        quota_minutes = timequotas_dict.get(profile_id, 0)
+        percentage = (total_spent_minutes / quota_minutes) * 100 if quota_minutes > 0 else 0
+        profile_stat = {
+            "profile_id": profile_id,
+            "profile_name": profile_name,
+            "total_spent": total_spent_hours + total_spent_minutes / 60,
+            "percentage": percentage,
+        }
+        logging.info(
+            "Profile_id="
+            + str(profile_id)
+            + " profile_name="
+            + profile_name
+            + " total_spent="
+            + str(total_spent_hours + total_spent_minutes / 60)
+            + " percentage="
+            + str(percentage)
+        )
+        profile_stats.append(profile_stat)
+        # Update Prometheus metrics
+#        PROFILE_TOTAL_SPENT.labels(profile_id=profile_id, profile_name=profile_name).set(total_spent_hours + total_spent_minutes / 60)
+#        PROFILE_QUOTA_PERCENTAGE.labels(profile_id=profile_id, profile_name=profile_name).set(percentage)
+    return profile_stats
 
 @app.route("/metrics")
 def updateResults():
@@ -562,6 +646,12 @@ def updateResults():
 
                 # logging.info("Total download: " + humansize(totalDownloadBytes))
                 # logging.info("Total upload: " + humansize(totalUploadBytes))
+
+        # SRM system utilization
+        profile_stats = get_profile_stats(client)
+        for stat in profile_stats:
+            srm_profile_total_spent.labels(profile_id=stat["profile_id"], profile_name=stat["profile_name"]).set(stat["total_spent"])
+            srm_profile_quota_percentage.labels(profile_id=stat["profile_id"], profile_name=stat["profile_name"]).set(stat["percentage"])
 
         cache_until = datetime.datetime.now() + datetime.timedelta(
             seconds=cache_seconds
