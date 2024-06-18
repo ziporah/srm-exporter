@@ -158,6 +158,8 @@ srm_network_tx_total = Gauge(
 )
 # Define Prometheus metrics
 srm_profile_total_spent = Gauge('srm_profile_total_spent', 'Total time spent per profile in hours', ['profile_id', 'profile_name'])
+srm_profile_reward_spent = Gauge('srm_profile_reward_spent', 'Total rewards spent per profile in hours', ['profile_id', 'profile_name'])
+srm_profile_total_reward = Gauge('srm_profile_total_reward', 'Total time reward per profile in hours', ['profile_id', 'profile_name'])
 srm_profile_total_quota = Gauge('srm_profile_total_quota', 'Quota time allowed per profile in hours', ['profile_id', 'profile_name'])
 srm_profile_quota_percentage = Gauge('srm_profile_quota_percentage', 'Percentage of time quota used per profile', ['profile_id', 'profile_name'])
 
@@ -439,7 +441,7 @@ def get_profile_stats(client):
         version=1,
     )
 
-    # Fetch Time Quotas
+    # Fetch Time Rewards
     timerewards = client.http.call(
         endpoint='entry.cgi',
         api='SYNO.SafeAccess.AccessControl.ConfigGroup.Reward',
@@ -468,17 +470,20 @@ def get_profile_stats(client):
             + " quota :"
             + str(timequotas_dict[profile_id])
         )
-    
+
     # Calculate total spent time and percentages
     for config_group in configgroups['config_groups']:
         profile_id = config_group['profile_id']
         profile_name = config_group['name']
         
         total_spent_minutes = 0
+        total_reward_minutes = 0
         for group in timespents['config_groups']:
             if group['config_group_id'] == profile_id:
                 device = group['timespent']
-                total_spent_minutes =  device['total_spent']['normal'] + device['total_spent']['reward']
+                if device['total_spent']['reward'] == 0:
+                    total_spent_minutes =  device['total_spent']['normal'] 
+                total_reward_minutes = device['total_spent']['reward']
                 # total_spent_minutes = sum(
                 #    device['total_spent']['normal'] + device['total_spent']['reward']
                 #    for device in devices.values()
@@ -486,6 +491,8 @@ def get_profile_stats(client):
         
         total_spent_hours = total_spent_minutes // 60
         total_spent_minutes %= 60
+        total_reward_hours = total_reward_minutes // 60
+        total_reward_minutes %= 60
         
         quota_minutes = timequotas_dict.get(profile_id, 0)
         total_quota_hours = timequotas_dict.get(profile_id, 0) // 60
@@ -493,24 +500,32 @@ def get_profile_stats(client):
         total_quota = total_quota_hours + total_quota_minutes / 60
 
         percentage = (((total_spent_hours * 60) + total_spent_minutes) / quota_minutes) * 100 if quota_minutes > 0 else 0
+	# Calculate reward time in hours
+        reward_time_seconds = 0
+        for group in timerewards['config_groups']:
+            if group['config_group_id'] == profile_id:
+                for reward in group['rewards']['ultra_rewards']:
+                    reward_time_seconds += reward['expired'] - reward['available']
+        
+        reward_time_hours = reward_time_seconds / 3600
+
         profile_stat = {
             "profile_id": profile_id,
             "profile_name": profile_name,
             "total_spent": total_spent_hours + total_spent_minutes / 60,
+            "total_reward": reward_time_hours,
+            "reward_spent": total_reward_hours + total_reward_minutes / 60,
             "percentage": percentage,
             "total_quota": total_quota,
         }
         logging.info(
-            "Profile_id="
-            + str(profile_id)
-            + " profile_name="
-            + profile_name
-            + " total_spent="
-            + str(total_spent_hours + total_spent_minutes / 60)
-            + " percentage="
-            + str(percentage)
-            + " total_quota="
-            + str(total_quota)
+            "Profile_id=" + str(profile_id)
+            + " profile_name=" + profile_name
+            + " total_spent=" + str(total_spent_hours + total_spent_minutes / 60)
+	    + " total_reward=" + str(reward_time_hours)
+	    + " reward_spent=" + str(total_reward_hours + total_reward_minutes / 60)
+            + " percentage=" + str(percentage)
+            + " total_quota=" + str(total_quota)
         )
         profile_stats.append(profile_stat)
         # Update Prometheus metrics
@@ -675,6 +690,8 @@ def updateResults():
         profile_stats = get_profile_stats(client)
         for stat in profile_stats:
             srm_profile_total_spent.labels(profile_id=stat["profile_id"], profile_name=stat["profile_name"]).set(stat["total_spent"])
+            srm_profile_reward_spent.labels(profile_id=stat["profile_id"], profile_name=stat["profile_name"]).set(stat["reward_spent"])
+            srm_profile_total_reward.labels(profile_id=stat["profile_id"], profile_name=stat["profile_name"]).set(stat["total_reward"])
             srm_profile_total_quota.labels(profile_id=stat["profile_id"], profile_name=stat["profile_name"]).set(stat["total_quota"])
             srm_profile_quota_percentage.labels(profile_id=stat["profile_id"], profile_name=stat["profile_name"]).set(stat["percentage"])
 
